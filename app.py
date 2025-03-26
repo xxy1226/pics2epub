@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import os
 from ebooklib import epub
 
@@ -60,28 +62,31 @@ class ImageToEPUBModel:
 
     self.book.toc = tuple(self.nav_links)
 
-    # self.book.add_item(epub.EpubNcx())
+    self.book.add_item(epub.EpubNcx()) # 老版本的 EPUB 需要添加 EpubNcx
     self.book.add_item(epub.EpubNav())
 
-    print("book.toc: ", self.book.toc)
-    print("book.spine: ", self.book.spine)
     epub.write_epub(output_path, self.book, {})
 
   def book_add_one_page(self, section):
     section_name, images = next(iter(section))
-    title = os.path.basename(image_path)
-    chapter = epub.EpubHtml(title=title, file_name=f"{title}.xhtml", lang="en")
+    chapter_title = os.path.basename(section_name)
+    chapter = epub.EpubHtml(
+      title=chapter_title, 
+      file_name=f"{chapter_title}.xhtml",
+      lang="en",
+    )
     chapter.content=u'<html><head></head><body>'
     for i, img_name in enumerate(self.sections):
       img_path = os.path.join(self.folder_path, img_name)
       image_content = open(img_path, 'rb').read()
+      ext = img_name.split('.')[-1].lower()
       img = epub.EpubImage(
         uid=f'image_{img_name}', 
-        file_name=os.path.join('static', img_name), 
-        media_type=f'image/{img_name.split(".")[-1]}', 
+        file_name=f"{chapter_title}/{img_name}", 
+        media_type=f'image/{ext}' if ext in ['png', 'gif', 'bmp'] else 'image/jpeg',
         content=image_content)
-      chapter.content += f'<br><img src="{os.path.join("static", img_name)}" alt="{img_name}" style="max-width: 100%; height: auto;" ><p>Image {i+1}: {img_name}</p>'
-      book.add_item(img)
+      chapter.content += f'<br><img src="{chapter_title}/{img_name}" alt="{img_name}" style="max-width: 100%; height: auto;" ><p>Image {i+1}: {img_name}</p>'
+      self.book.add_item(img)
     chapter.content += u'</body></html>'
     self.book.add_item(chapter)
     # self.book.toc = (epub.Link('chapter.xhtml', 'Collection', 'Collection'),)
@@ -93,36 +98,43 @@ class ImageToEPUBModel:
       image_file_path = os.path.join(self.folder_path, image)
       img_data = open(image_file_path, 'rb').read()
       image_name = os.path.basename(image)
+      ext = image_name.split('.')[-1].lower()
+      print(f"{section_name}/{image_name}")
       image_item = epub.EpubImage(
         uid=f'image_{image_name}', 
-        file_name=os.path.join(section_name, image_name),
-        media_type=f"image/jpeg" if image_name.lower().endswith(('.jpg', '.jpeg')) else f"image/{image_name.split('.')[-1]}",
+        file_name=f"{section_name}/{image_name}",
+        media_type=f"image/{ext}" if ext in ['png', 'gif', 'bmp'] else 'image/jpeg',
         content=img_data,
       )
       self.book.add_item(image_item)
       # 创建 HTML 内容
       html_content = f"""
         <html>
-            <head>
-            </head>
-            <body>
-                <div style="text-align: center;">
-                    <img src="{os.path.join(section_name, image_name)}" alt="{image_name}" style="max-width: 100%; height: auto;" >
-                </div>
-            </body>
+          <head>
+            <title>{image_name}</title>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+          </head>
+          <body>
+            <div style="text-align: center;">
+              <img src="{f"{section_name}/{image_name}"}" alt="{image_name}" style="max-width: 100%; height: auto;" >
+            </div>
+          </body>
         </html>
         """
       # 创建图片页
-      chapter_title = section_name+': '+image
+      chapter_title = section_name+':'+image
       chapter = epub.EpubHtml(
         title=chapter_title,
         file_name=f'{chapter_title}.xhtml',
+        lang='en',
         content=html_content,
       )
       self.book.add_item(chapter)
       self.book.spine.append(chapter)
       if not i:
         self.nav_links.append(chapter)
+    self.book.toc.append(epub.Link(f"{section_name}/{images[0]}.xhtml", section_name, section_name))
     
 class ImageToEPUBView:
   def __init__(self, root, controller):
