@@ -3,7 +3,7 @@
 import os
 from ebooklib import epub
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, ttk, colorchooser
 from PIL import Image, ImageTk
 
 # import ebooklib
@@ -50,7 +50,7 @@ class ImageToEPUBModel:
       return [os.path.join(os.path.basename(folder_path), f) for f in sorted(os.listdir(folder_path)) if f.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'bmp'))]
     return [f for f in sorted(os.listdir(folder_path)) if f.lower().endswith(('png', 'jpg', 'jpeg', 'gif', 'bmp'))]
   
-  def generate_epub(self, output_path, title, author, pagination=True, cover_path=None):
+  def generate_epub(self, output_path, title, author, pagination, cover_path, picname=True, bg_color="#ffffff", text_color="#000000"):
     """生成EPUB文件"""
     self.book = epub.EpubBook()
     self.book.set_title(title)
@@ -69,10 +69,10 @@ class ImageToEPUBModel:
     for section in self.sections:
       section_name, images = next(iter(section.items()))
 
-      if not pagination is None:
-        self.book_add_per_page(section_name, images)
+      if pagination:
+        self.book_add_per_page(section_name, images, picname, bg_color, text_color)
       else:
-        self.book_add_one_page(section_name, images)
+        self.book_add_one_page(section_name, images, picname, bg_color, text_color)
 
     # 添加目录
     style = '''
@@ -132,7 +132,7 @@ nav[epub|type~='toc'] > ol > li > ol > li {
     # 生成书籍
     epub.write_epub(output_path, self.book, {})
 
-  def book_add_per_page(self, section_name, images):
+  def book_add_per_page(self, section_name, images, picname, bg_color, text_color):
     """每一页一张图片"""
     clean_section_name = "".join(c if c.isalnum() else "_" for c in section_name)
 
@@ -158,18 +158,19 @@ nav[epub|type~='toc'] > ol > li > ol > li {
         lang='en'
       )
       body_content = f"""
-  <div style="text-align: center;">
+  <div style="text-align: center; padding: 5px; background-color: {bg_color};color: {text_color};">
     <img src="{clean_section_name}/{image_name}" alt="{image_name}" style="max-width: 100%; height: auto;" >
+    {f"<p>{image_name}</p>" if picname else ""}
   </div>
       """
-      chapter.content = default_page.format(body_content=body_content)
+      chapter.content = default_page.format(bg_color=bg_color, text_color=text_color, body_content=body_content)
       self.book.add_item(chapter)
       self.book.spine.append(chapter)
       self.item_count += 1
       if not i:
         self.toc.append(epub.Link(chapter_name, section_name, clean_section_name))
 
-  def book_add_one_page(self, section_name, images):
+  def book_add_one_page(self, section_name, images, picname, bg_color, text_color):
     """每一页一个文件夹的图片"""
     clean_section_name = "".join(c if c.isalnum() else "_" for c in section_name)
     
@@ -197,13 +198,14 @@ nav[epub|type~='toc'] > ol > li > ol > li {
       self.book.add_item(image_item)
       # 创建 HTML 内容
       body_content += f"""
-  <div style="text-align: center;">
+  <div style="text-align: center; background-color: {bg_color};color: {text_color};">
     <img src="{clean_section_name}/{image_name}" alt="{image_name}" style="max-width: 100%; height: auto;" >
+    {f"<p>{image_name}</p>" if picname else ""}
   </div>
       """
       self.item_count += 1
 
-    chapter.content = default_page.format(body_content=body_content)
+    chapter.content = default_page.format(gb_color=bg_color, text_color=text_color, body_content=body_content)
     self.book.add_item(chapter)
     self.book.spine.append(chapter)
     self.toc.append(epub.Link(chapter_name, section_name, clean_section_name))
@@ -223,6 +225,8 @@ class ImageToEPUBView:
     self.controller = controller
     self.folder_indexes = [] # 记录文件夹的索引
     self.selected_index = 1 # 记录选中的图片，之后作为封面使用
+    self.bg_color = "#ffffff" # 书页背景默认白色
+    self.text_color = "#000000" # 字体默认黑色
 
     # 文件夹选择按钮
     self.folder_button = ttk.Button(root, text="选择文件夹", command=self.controller.on_folder_selected)
@@ -259,9 +263,21 @@ class ImageToEPUBView:
 
     # 分页按钮
     self.pagination_checkbutton = ttk.Checkbutton(root, text='一页一图')
-    self.pagination_checkbutton.grid(row=4, column=1, padx=(0, 10), pady=5, sticky="e")
+    self.pagination_checkbutton.grid(row=4, column=0, padx=(0, 10), pady=5, sticky="e")
     self.pagination_checkbutton.state(['!alternate'])
     self.pagination_checkbutton.state(['selected']) # ('alternate',) ('selected',) ()
+
+    # 显示图片名称
+    self.picname_checkbutton = ttk.Checkbutton(root, text='在图片下方显示名称')
+    self.picname_checkbutton.grid(row=4, column=1, padx=(0, 10), pady=5, sticky="e")
+    self.picname_checkbutton.state(['!alternate'])
+    self.picname_checkbutton.state([]) # ('alternate',) ('selected',) ()
+
+    # 颜色选择
+    self.color_label = tk.Label(root, bg="white", text="    文字样例    ", highlightbackground="black", highlightthickness=1)
+    self.color_label.grid(row=4, column=2, padx=(10, 5), pady=5, sticky="e")
+    self.color_button = ttk.Button(root, text="选择书页背景颜色", command=self.choose_color)
+    self.color_button.grid(row=4, column=3, padx=(0, 10), pady=5, sticky="ew")
 
     # 生成EPUB按钮
     self.generate_button = ttk.Button(root, text="生成EPUB", command=self.controller.on_generate_epub)
@@ -323,6 +339,23 @@ class ImageToEPUBView:
     self.image_view.config(image=img_tk, bg="SystemButtonFace", text="")
     self.image_view.image = img_tk
   
+  def choose_color(self):
+    """弹出色盘，返回颜色值（元组RGB 和 HEX）"""
+    color_code = colorchooser.askcolor(title="选择颜色")
+    if color_code[1]:  # 用户选择了颜色
+      self.bg_color = color_code[1]
+      self.color_label.config(bg=self.bg_color)
+
+      # 判断颜色是否太暗（转换 RGB，计算亮度）
+      r, g, b = color_code[0]
+      brightness = (r * 299 + g * 587 + b * 114) / 1000
+
+      if brightness < 128:
+        self.text_color = "#ffffff" # 背景太暗，改文字为白
+      else:
+        self.text_color = "#000000" # 否则用黑字
+      self.color_label.config(fg=self.text_color)
+
   def clear_view(self):
     self.image_listbox.delete(0, tk.END)
     self.title_entry.delete(0, tk.END)
@@ -332,6 +365,8 @@ class ImageToEPUBView:
     self.image_view.grid(row=2, column=4, columnspan=2, padx=10, pady=10, sticky="nsew")
     self.folder_indexes = []
     self.selected_index = 1
+    self.bg_color = "#ffffff"
+    self.text_color = "#000000"
 
 class ImageToEPUBController:
   def __init__(self, root):
@@ -368,7 +403,7 @@ class ImageToEPUBController:
     author = self.view.get_author()
 
     # 创建封面
-    cover_path = None
+    cover_path = False
     if len(self.view.cover_checkbutton.state()) and self.view.cover_checkbutton.state()[0]=='selected':
       cover_path = os.path.join(self.model.folder_path, self.view.get_cover_image())
 
@@ -377,11 +412,16 @@ class ImageToEPUBController:
     if len(self.view.pagination_checkbutton.state()) and self.view.pagination_checkbutton.state()[0]=='selected':
       pagination = True
 
+    # 是否每页一张图片
+    picname = False
+    if len(self.view.picname_checkbutton.state()) and self.view.picname_checkbutton.state()[0]=='selected':
+      picname = True
+
     # 输出文件
     output_path = filedialog.asksaveasfilename(defaultextension=".epub", filetypes=[("EPUT files", "*.epub")], initialfile=f"{title}.epub")
     if output_path:
       try:
-        self.model.generate_epub(output_path, title, author, pagination, cover_path)
+        self.model.generate_epub(output_path, title, author, pagination, cover_path, picname, self.view.bg_color, self.view.text_color)
         messagebox.showinfo("成功", f"EPUB文件已生成：{output_path}")
       except Exception as e:
         messagebox.showerror("错误", f"生成EPUB文件时出错：{str(e)}")
