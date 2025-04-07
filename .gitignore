@@ -2,3 +2,6 @@ samples
 tests
 *.epub
 __pycache__
+test*
+debug*
+*.ipynb
