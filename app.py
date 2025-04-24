@@ -227,6 +227,7 @@ class ImageToEPUBView:
     self.selected_index = 1 # 记录选中的图片，之后作为封面使用
     self.bg_color = "#ffffff" # 书页背景默认白色
     self.text_color = "#000000" # 字体默认黑色
+    self.create_menu(root) # 创建菜单
 
     # 文件夹选择按钮
     self.folder_button = ttk.Button(root, text="选择文件夹", command=self.controller.on_folder_selected)
@@ -292,6 +293,49 @@ class ImageToEPUBView:
     root.grid_columnconfigure(5, weight=3) 
     root.grid_rowconfigure(2, weight=1)     # 图片列表区域占据更多空间
 
+  def create_menu(self, root):
+    menubar = tk.Menu(root)
+
+    # 文件菜单
+    file_menu = tk.Menu(menubar, tearoff=0)
+    file_menu.add_command(label="选择文件夹", command=self.controller.on_folder_selected)
+    self.reset_menu_item = file_menu.add_command(label="撤销本书所有改变", command=self.controller.reset_folder, state="disabled")
+    file_menu.add_separator()
+    file_menu.add_command(label="退出", command=root.quit)
+    menubar.add_cascade(label="文件", menu=file_menu)
+
+    # 帮助菜单
+    help_menu = tk.Menu(menubar, tearoff=0)
+    help_menu.add_command(label="帮助", command=self.show_help)
+    help_menu.add_command(label="关于", command=self.show_about)
+    menubar.add_cascade(label="帮助", menu=help_menu)
+
+    self.root.config(menu=menubar)
+
+  def show_help(self):
+    """显示帮助信息"""
+    help_text = """使用说明：
+1. 点击"选择文件夹"按钮或菜单项选择包含图片的文件夹
+2. 设置书名、作者等选项
+3. 点击"生成EPUB"按钮创建电子书
+
+功能说明：
+- 一页一图：每张图片单独一页
+- 创建封面：使用选中的图片作为封面
+- 显示图片名称：在图片下方显示文件名
+- 书页背景颜色：设置电子书背景色"""
+    messagebox.showinfo("帮助", help_text)
+
+  def show_about(self):
+    """显示关于信息"""
+    about_text = """图片转EPUB工具 v1.0
+
+一个简单的工具，用于将图片转换为EPUB电子书格式。
+
+作者: 安德烈夫斯基
+日期: 2025/04/07"""
+    messagebox.showinfo("关于", about_text)
+
   def update_image_list(self, image_files):
     # 更新图片列表
     self.image_listbox.delete(0, tk.END)
@@ -306,6 +350,10 @@ class ImageToEPUBView:
       for file in files:
         self.image_listbox.insert(tk.END, file)
         count += 1
+
+    if self.reset_menu_item:
+      menu = self.root.nametowidget(self.reset_menu_item)
+      menu.entryconfig("撤销本书所有改变", state="normal")
 
   def set_title(self, title):
     """设置书名"""
@@ -386,7 +434,24 @@ class ImageToEPUBController:
 
       # 获取文件夹名称并设置为书名
       self.view.set_title(os.path.basename(folder_path))
-    
+
+  def reset_folder(self, folder_path=None):
+    """不改变选择的文件夹，恢复内容"""
+    if not folder_path:
+      if self.model.folder_path:
+        folder_path = self.model.folder_path
+      else:
+        return 
+      
+    # 清除原有内容
+    self.model.clear_model()
+    self.view.clear_view()
+    self.model.load_images(folder_path)
+    self.view.update_image_list(self.model.sections)
+
+    # 获取文件夹名称并设置为书名
+    self.view.set_title(os.path.basename(folder_path))
+  
   def on_generate_epub(self):
     """处理生成EPUB事件"""
     if not self.model.folder_path or self.view.image_listbox.size() < 2:
